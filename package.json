@@ -1,0 +1,24 @@
+{
+  "name": "file-fuser",
+  "version": "0.0.1",
+  "description": "subserver to combine files for caching",
+  "main": "index.js",
+  "scripts": {
+    "test": "node_modules/nodeunit/bin/nodeunit tests/*.js  --reporter minimal"
+  },
+  "keywords": [
+    "LivelyWeb",
+    "LivelyKernel",
+    "subserver"
+  ],
+  "author": "Robert Krahn",
+  "license": "MIT",
+  "dependencies": {
+    "async": "~0.2"
+  },
+  "devDependencies": {
+    "nodeunit": "~0.8",
+    "request": "~2.25",
+    "lively-fs-helper": "https://github.com/rksm/lively-fs-helper/tarball/master"
+  }
+}
