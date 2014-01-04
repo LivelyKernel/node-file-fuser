@@ -1,12 +1,14 @@
-var path = require("path"),
-    http = require("http"),
-    async = require("async"),
-    request = require("request"),
-    fsHelper = require("lively-fs-helper"),
-    handler = require("../index"),
-    port = 9011, testServer, testApp,
+var path          = require("path"),
+    http          = require("http"),
+    async         = require("async"),
+    request       = require("request"),
+    fs            = require("fs"),
+    fsHelper      = require("lively-fs-helper"),
+    handler       = require("../index"),
+    port          = 9011,
     baseDirectory = __dirname,
-    testDirectory = path.join(baseDirectory, "testDir");
+    testDirectory = path.join(baseDirectory, "testDir"),
+                    testServer, testApp;
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // debugging
@@ -67,11 +69,13 @@ var tests = {
       function(next) {
         var files = {
           "testDir": {
-            "file1.js": "// file1 content\nfoo + bar + baz",
-            "file2.js": "// file2 content\ntest test test\n\n\n\n",
-            "file3.js": "// file3 content\ntest test test more test",
-            "file4.js": "// file4 content\ntest test test more test"
-          },
+            "some-folder": {
+              "file1.js": "// file1 content\nfoo + bar + baz",
+              "file2.js": "// file2 content\ntest test test\n\n\n\n",
+              "file3.js": "// file3 content\ntest test more test",
+              "file4.js": "// file4 content\ntest test test more test"
+            }
+          }
         };
         fsHelper.createDirStructure(baseDirectory, files, next);
       },
@@ -83,8 +87,12 @@ var tests = {
           app: testApp,
           routes: [{
               route: 'combined/some.js',
-              baseDirectory: baseDirectory,
-              files: ['testDir/file1.js', 'testDir/file4.js', 'testDir/file3.js']
+              baseDirectory: testDirectory,
+              combinedFile: 'combined.js',
+              files: ['some-folder/file1.js',
+                      'some-folder/file4.js',
+                      'some-folder/file3.js']
+              
             }]
         }, next);
       },
@@ -101,20 +109,57 @@ var tests = {
   },
 
   testSimpleFileFuse: function(test) {
-    var expected = "// testDir/file1.js:\n"
+    var expected = "// some-folder/file1.js:\n"
                  + "// file1 content\nfoo + bar + baz"
                  + "\n\n\n"
-                 + "// testDir/file4.js:\n"
+                 + "// some-folder/file4.js:\n"
                  + "// file4 content\ntest test test more test"
                  + "\n\n\n"
-                 + "// testDir/file3.js:\n"
-                 + "// file3 content\ntest test test more test"
+                 + "// some-folder/file3.js:\n"
+                 + "// file3 content\ntest test more test"
                  + "\n\n\n";
     get('combined/some.js', function(err, res, body) {
       test.equal(body, expected);
       test.done();
     });
+  },
+
+  testFusedContentIsUpdatedWhenFileChanges: function(test) {
+    var expected1 = "// some-folder/file1.js:\n"
+                  + "// file1 content\nfoo + bar + baz"
+                  + "\n\n\n"
+                  + "// some-folder/file4.js:\n"
+                  + "// file4 content\ntest test test more test"
+                  + "\n\n\n"
+                  + "// some-folder/file3.js:\n"
+                  + "// file3 content\ntest test more test"
+                  + "\n\n\n",
+        expected2 = expected1.replace("// file4 content\ntest test test more test", "changed");
+    async.series([
+      function(next) {
+        get('combined/some.js', function(err, res, body) {
+          test.equal(body, expected1, 'original content not OK'); next();
+        });
+      },
+      function(next) {
+        fs.writeFile(path.join(testDirectory, 'some-folder', 'file4.js'), "changed", next);
+      },
+      function(next) {
+        get('combined/some.js', function(err, res, body) {
+          test.equal(body, expected2, "content not updated"); next();
+        });
+      }
+    ], test.done);
+  },
+
+  testRetrieveHash: function(test) {
+    var expected = "d791cc00f6c48cb244fa36306f991ea6";
+    get('combined/some.js?hash', function(err, res, body) {
+      test.equal(body, expected);
+      test.done();
+    });;
   }
+
 };
 
 module.exports = tests;
