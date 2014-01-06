@@ -152,12 +152,24 @@ var tests = {
     ], test.done);
   },
 
-  testRetrieveHash: function(test) {
-    var expected = "d791cc00f6c48cb244fa36306f991ea6";
-    get('combined/some.js?hash', function(err, res, body) {
-      test.equal(body, expected);
-      test.done();
-    });;
+  testHashIsUpdatedWhenFileChanges: function(test) {
+    var expected1 = "d791cc00f6c48cb244fa36306f991ea6",
+        expected2 = "e6019acbf9c8917c5417d1c4f3d132fd";
+    async.series([
+      function(next) {
+        get('combined/some.js?hash', function(err, res, body) {
+          test.equal(body, expected1); next();
+        }); 
+      },
+      function(next) {
+        fs.writeFile(path.join(testDirectory, 'some-folder', 'file4.js'), "changed", next);
+      },
+      function(next) {
+        get('combined/some.js?hash', function(err, res, body) {
+          test.equal(body, expected2); next();
+        }); 
+      },
+    ], test.done);
   }
 
 };
