@@ -5,20 +5,19 @@ var path   = require("path"),
     crypto = require("crypto");
 
 
-function FileCombiner(options) {
-  if (!options) throw new Error('FileCombiner requires config object');
+function FileFuser(options) {
+  if (!options) throw new Error('FileFuser requires config object');
   this.baseDirectory = options.baseDirectory;
   this.files = options.files;
   this.combinedFile = options.combinedFile;
-  this.route = options.route;
 }
 
 
-FileCombiner.prototype.getCombinedFilePath = function() {
+FileFuser.prototype.getCombinedFilePath = function() {
   return path.join(this.baseDirectory, this.combinedFile);
 }
 
-FileCombiner.prototype.getCombinedFileStream = function(thenDo) {
+FileFuser.prototype.getCombinedFileStream = function(thenDo) {
   var stream;
   try {
     stream = fs.createReadStream(this.getCombinedFilePath());
@@ -26,7 +25,7 @@ FileCombiner.prototype.getCombinedFileStream = function(thenDo) {
   thenDo(null, stream);
 }
 
-FileCombiner.prototype.writeFilesInto = function(baseDirectory, files, thenDo) {
+FileFuser.prototype.writeFilesInto = function(baseDirectory, files, thenDo) {
   var targetFilePath   = this.getCombinedFilePath(),
     targetFileStream = fs.createWriteStream(targetFilePath),
     writeFileTasks   = files.map(function(file) {
@@ -49,11 +48,11 @@ FileCombiner.prototype.writeFilesInto = function(baseDirectory, files, thenDo) {
   });
 }
 
-FileCombiner.prototype.checkIfCombinedFilesAreUpToDate = function(thenDo) {
+FileFuser.prototype.checkIfCombinedFilesAreUpToDate = function(thenDo) {
   thenDo(null, false);
 }
 
-FileCombiner.prototype.streamCombinedFile = function(thenDo) {
+FileFuser.prototype.streamCombinedFile = function(thenDo) {
   var self = this;
   self.checkIfCombinedFilesAreUpToDate(function(err, areUpToDate) {
     if (err) { thenDo(err, null); return; }
@@ -65,7 +64,7 @@ FileCombiner.prototype.streamCombinedFile = function(thenDo) {
   })
 }
 
-FileCombiner.prototype.computeHash = function(combinedFileStream, thenDo) {
+FileFuser.prototype.computeHash = function(combinedFileStream, thenDo) {
   var md5sum = crypto.createHash('md5'), hash;
   md5sum.setEncoding('hex');
   md5sum.on('data', function(d) {hash = String(d); });
@@ -76,7 +75,7 @@ FileCombiner.prototype.computeHash = function(combinedFileStream, thenDo) {
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // http interface
-FileCombiner.prototype.processJSRequest = function(req, res) {
+FileFuser.prototype.processJSRequest = function(req, res) {
   this.streamCombinedFile(function(err, combinedFileStream) {
     if (err) { res.status(500).end(String(err)); return; }
     var piped = combinedFileStream.pipe(res);
@@ -85,7 +84,7 @@ FileCombiner.prototype.processJSRequest = function(req, res) {
   });
 }
 
-FileCombiner.prototype.processHashRequest = function(req, res) {
+FileFuser.prototype.processHashRequest = function(req, res) {
   var self = this;
   self.streamCombinedFile(function(err, combinedFileStream) {
     if (err) { res.status(500).end(String(err)); return; }
@@ -96,7 +95,7 @@ FileCombiner.prototype.processHashRequest = function(req, res) {
   });
 }
 
-FileCombiner.prototype.handleRequest = function() {
+FileFuser.prototype.handleRequest = function() {
   var self = this;
   return function(req, res) {
     var uri = url.parse(req.url, true/*parse query*/);
@@ -109,16 +108,33 @@ FileCombiner.prototype.handleRequest = function() {
 }
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// initialize-release
+FileFuser.prototype.start = function(thenDo) {
+  thenDo && thenDo(null, this);
+}
+
+FileFuser.on = function(options, thenDo) {
+  // options = {
+  //   baseDirectory: STRING,
+  //   files [STRING],
+  //   combinedFile: STRING -- path to file that holds fused content
+  var fileFuser = new FileFuser(options);
+  fileFuser.start(thenDo);
+}
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // setup
 function start(settings, thenDo) {
   var app = settings.app;
   (settings.routes || []).forEach(function(routeSettings) {
     var r = routeSettings.route,
-      baseDir = routeSettings.baseDirectory || process.cwd(),
-      files = routeSettings.files || [],
-      fileCombiner = new FileCombiner(routeSettings);
-    app.get(r, fileCombiner.handleRequest());
-    thenDo && thenDo();
+        baseDir = routeSettings.baseDirectory || process.cwd(),
+        files = routeSettings.files || [];
+    FileFuser.on(routeSettings, function(err, fuser) {
+      if (err) { thenDo(err, null); return; }
+      fuser && app.get(r, fuser.handleRequest());
+      thenDo && thenDo();
+    })
   });
 }
 

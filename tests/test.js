@@ -44,16 +44,6 @@ function closeServer(server, thenDo) { server.close(thenDo); }
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // request helpers
-function put(path, content, thenDo) {
-  var url = 'http://localhost:' + port + '/' + (path || '');
-  request.put(url, {body: content}, function(err, res) {
-    console.log('PUT done'); thenDo && thenDo(err); });
-}
-function del(path, thenDo) {
-  var url = 'http://localhost:' + port + '/' + (path || '');
-  request(url, {method: 'DELETE'}, function(err, res) {
-    console.log('DELETE done'); thenDo && thenDo(err); });
-}
 function get(path, thenDo) {
   var url = 'http://localhost:' + port + '/' + (path || '');
   request(url, {method: 'GET'}, function(err, res, body) {
@@ -86,14 +76,14 @@ var tests = {
         handler.start({
           app: testApp,
           routes: [{
-              route: 'combined/some.js',
-              baseDirectory: testDirectory,
-              combinedFile: 'combined.js',
-              files: ['some-folder/file1.js',
-                      'some-folder/file4.js',
-                      'some-folder/file3.js']
-              
-            }]
+            route: 'combined/some.js',
+            baseDirectory: testDirectory,
+            combinedFile: 'combined.js',
+            files: ['some-folder/file1.js',
+                    'some-folder/file4.js',
+                    'some-folder/file3.js']
+            
+          }]
         }, next);
       },
       logProgress('handler setup')
