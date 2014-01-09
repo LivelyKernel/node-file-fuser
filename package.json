@@ -14,7 +14,8 @@
   "author": "Robert Krahn",
   "license": "MIT",
   "dependencies": {
-    "async": "~0.2"
+    "async": "~0.2",
+    "watch-interface": ""
   },
   "devDependencies": {
     "nodeunit": "~0.8",

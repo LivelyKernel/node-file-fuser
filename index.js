@@ -1,9 +1,11 @@
 var path   = require("path"),
+    util   = require("util"),
     fs     = require("fs"),
     async  = require("async"),
     url    = require("url"),
     crypto = require("crypto");
 
+var fWatcher = require("watch-interface");
 
 function FileFuser(options) {
   if (!options) throw new Error('FileFuser requires config object');
@@ -25,21 +27,29 @@ FileFuser.prototype.getCombinedFileStream = function(thenDo) {
   thenDo(null, stream);
 }
 
+function createHeader(files) {
+  return util.format('// This file was generated on %s\n\n'
+                   + 'JSLoader.expectToLoadModules([%s]);\n\n',
+                     new Date().toGMTString(),
+                     files.map(function(fn) { return "'" + fn + "'" }));
+}
+
 FileFuser.prototype.writeFilesInto = function(baseDirectory, files, thenDo) {
   var targetFilePath   = this.getCombinedFilePath(),
-    targetFileStream = fs.createWriteStream(targetFilePath),
-    writeFileTasks   = files.map(function(file) {
-      var fullPath = path.join(baseDirectory, file);
-      return function(next) {
-        targetFileStream.write('// ' + file + ':\n');
-        var reader = fs.createReadStream(fullPath)
-        reader.pipe(targetFileStream, {end: false/*don't close target stream*/});
-        reader.on('end', function() {
-          targetFileStream.write('\n\n\n');
-          next();
-        });
-      }
-    });
+      targetFileStream = fs.createWriteStream(targetFilePath),
+      headerTask       = function(next) { targetFileStream.write(createHeader(files)); next(); },
+      writeFileTasks   = [headerTask].concat(files.map(function(file) {
+        var fullPath = path.join(baseDirectory, file);
+        return function(next) {
+          targetFileStream.write(';// ' + file + ':\n');
+          var reader = fs.createReadStream(fullPath)
+          reader.pipe(targetFileStream, {end: false/*don't close target stream*/});
+          reader.on('end', function() {
+            targetFileStream.write('\n\n\n');
+            next();
+          });
+        }
+      }));
 
   async.series(writeFileTasks, function(err) {
     if (err) { console.log('error writing %s: %s', targetFilePath, err); }
