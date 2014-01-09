@@ -9,7 +9,8 @@
   "keywords": [
     "LivelyWeb",
     "LivelyKernel",
-    "subserver"
+    "subserver",
+    "caching"
   ],
   "author": "Robert Krahn",
   "license": "MIT",

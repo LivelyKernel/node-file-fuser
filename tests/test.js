@@ -1,15 +1,13 @@
 var path          = require("path"),
     crypto        = require("crypto"),
-    http          = require("http"),
     async         = require("async"),
-    request       = require("request"),
     fs            = require("fs"),
     fsHelper      = require("lively-fs-helper"),
-    handler       = require("../index"),
+    createFuser   = require("../index"),
     port          = 9011,
     baseDirectory = __dirname,
     testDirectory = path.join(baseDirectory, "testDir"),
-                    testServer, testApp, fsTimeStamp;
+                    fuser, fsTimeStamp;
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // debugging
@@ -17,44 +15,17 @@ function logProgress(msg) {
   return function(thenDo) { console.log(msg); thenDo && thenDo(); }
 }
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// test server
-function createServer(thenDo) {
-  var server = testServer = http.createServer();
-  server.on('close', function() { console.log('server for tests closed'); });
-  server.listen(port, function() {
-    console.log('server for tests started');
-    thenDo(null, server); });
-  var handlers = {};
-  server.on('request', function(req, res) {
-    var handler = handlers[req.method.toLowerCase()];
-    if (!handler)
-      throw new Error(
-        'no handler for request ' + req.method + ' ' + req.url);
-    handler(req, res);
-  });
-  testApp = {
-    get: function(route, handler) {
-      // FIXME, use route
-      handlers['get'] = handler;
-    }
-  }
-}
-
-function closeServer(server, thenDo) { server.close(thenDo); }
-
 function md5(string) {
     var md5 = crypto.createHash('md5');
     md5.update(String(string));
     return md5.digest('hex');
 }
 
-// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-// request helpers
-function get(path, thenDo) {
-  var url = 'http://localhost:' + port + '/' + (path || '');
-  request(url, {method: 'GET'}, function(err, res, body) {
-    thenDo && thenDo(err, res, body); });
+function withStreamData(stream, thenDo) {
+  var data = '';
+  stream.on('data', function(d) { data += String(d); });
+  stream.on('end', function() { thenDo(null, data); });
+  stream.on('error', function(err) { thenDo(err, data); });
 }
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -78,21 +49,14 @@ var tests = {
         fsHelper.createDirStructure(baseDirectory, files, next);
       },
       logProgress('test files created'),
-      createServer,
-      logProgress('server created'),
       function(next) {
-        handler.start({
-          app: testApp,
-          routes: [{
-            route: 'combined/some.js',
-            baseDirectory: testDirectory,
-            combinedFile: 'combined.js',
-            files: ['some-folder/file1.js',
-                    'some-folder/file4.js',
-                    'some-folder/file3.js']
-            
-          }]
-        }, next);
+        createFuser({
+          baseDirectory: testDirectory,
+          combinedFile: 'combined.js',
+          files: ['some-folder/file1.js',
+                  'some-folder/file4.js',
+                  'some-folder/file3.js']
+          }, function(err, _fuser) { fuser = _fuser; next(err); });
       },
       logProgress('handler setup')
     ], callback);
@@ -100,8 +64,7 @@ var tests = {
 
   tearDown: function (callback) {
     async.series([
-      function(next) { handler.close(next); },
-      function(next) { testServer.close(next); },
+      function(next) { if (fuser) fuser.close(next); else next(); },
       fsHelper.cleanupTempFiles
     ], callback);
   },
@@ -118,9 +81,13 @@ var tests = {
                  + ";// some-folder/file3.js:\n"
                  + "// file3 content\ntest test more test"
                  + "\n\n\n";
-    get('combined/some.js', function(err, res, body) {
-      test.equal(body, expected);
-      test.done();
+    fuser.withCombinedFileStreamDo(function(err, stream) {
+      test.ifError(err);
+      withStreamData(stream, function(err, data) {
+        test.ifError(err);
+        test.equal(data, expected);
+        test.done();
+      });
     });
   },
 
@@ -139,16 +106,26 @@ var tests = {
         expected2 = expected1.replace("// file4 content\ntest test test more test", "changed");
     async.series([
       function(next) {
-        get('combined/some.js', function(err, res, body) {
-          test.equal(body, expected1, 'original content not OK'); next();
+        fuser.withCombinedFileStreamDo(function(err, stream) {
+          test.ifError(err);
+          withStreamData(stream, function(err, data) {
+            test.ifError(err);
+            test.equal(data, expected1, 'original content not OK');
+            next();
+          });
         });
       },
       function(next) {
         fs.writeFile(path.join(testDirectory, 'some-folder', 'file4.js'), "changed", next);
       },
       function(next) {
-        get('combined/some.js', function(err, res, body) {
-          test.equal(body, expected2, "content not updated"); next();
+        fuser.withCombinedFileStreamDo(function(err, stream) {
+          test.ifError(err);
+          withStreamData(stream, function(err, data) {
+            test.ifError(err);
+            test.equal(data, expected2, "content not updated");
+            next();
+          });
         });
       }
     ], test.done);
@@ -171,17 +148,19 @@ var tests = {
         expected2 = md5(content2);
     async.series([
       function(next) {
-        get('combined/some.js?hash', function(err, res, body) {
-          test.equal(body, expected1); next();
-        }); 
+        fuser.withHashDo(function(err, hash) {
+          test.ifError(err);
+          test.equal(hash, expected1); next();
+        });
       },
       function(next) {
         fs.writeFile(path.join(testDirectory, 'some-folder', 'file4.js'), "changed", next);
       },
       function(next) {
-        get('combined/some.js?hash', function(err, res, body) {
-          test.equal(body, expected2); next();
-        }); 
+        fuser.withHashDo(function(err, hash) {
+          test.ifError(err);
+          test.equal(hash, expected2); next();
+        });
       },
     ], test.done);
   }
