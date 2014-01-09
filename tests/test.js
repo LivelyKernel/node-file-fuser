@@ -1,4 +1,5 @@
 var path          = require("path"),
+    crypto        = require("crypto"),
     http          = require("http"),
     async         = require("async"),
     request       = require("request"),
@@ -8,7 +9,7 @@ var path          = require("path"),
     port          = 9011,
     baseDirectory = __dirname,
     testDirectory = path.join(baseDirectory, "testDir"),
-                    testServer, testApp;
+                    testServer, testApp, fsTimeStamp;
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // debugging
@@ -42,6 +43,12 @@ function createServer(thenDo) {
 
 function closeServer(server, thenDo) { server.close(thenDo); }
 
+function md5(string) {
+    var md5 = crypto.createHash('md5');
+    md5.update(String(string));
+    return md5.digest('hex');
+}
+
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // request helpers
 function get(path, thenDo) {
@@ -67,6 +74,7 @@ var tests = {
             }
           }
         };
+        fsTimeStamp = (new Date()).toGMTString();
         fsHelper.createDirStructure(baseDirectory, files, next);
       },
       logProgress('test files created'),
@@ -99,13 +107,15 @@ var tests = {
   },
 
   testSimpleFileFuse: function(test) {
-    var expected = "// some-folder/file1.js:\n"
+    var expected = '// This file was generated on ' + fsTimeStamp + '\n\n'
+                 + 'JSLoader.expectToLoadModules([\'some-folder/file1.js\',\'some-folder/file4.js\',\'some-folder/file3.js\']);\n\n'
+                 + ";// some-folder/file1.js:\n"
                  + "// file1 content\nfoo + bar + baz"
                  + "\n\n\n"
-                 + "// some-folder/file4.js:\n"
+                 + ";// some-folder/file4.js:\n"
                  + "// file4 content\ntest test test more test"
                  + "\n\n\n"
-                 + "// some-folder/file3.js:\n"
+                 + ";// some-folder/file3.js:\n"
                  + "// file3 content\ntest test more test"
                  + "\n\n\n";
     get('combined/some.js', function(err, res, body) {
@@ -115,13 +125,15 @@ var tests = {
   },
 
   testFusedContentIsUpdatedWhenFileChanges: function(test) {
-    var expected1 = "// some-folder/file1.js:\n"
+    var expected1 = '// This file was generated on ' + fsTimeStamp + '\n\n'
+                  + 'JSLoader.expectToLoadModules([\'some-folder/file1.js\',\'some-folder/file4.js\',\'some-folder/file3.js\']);\n\n'
+                  + ";// some-folder/file1.js:\n"
                   + "// file1 content\nfoo + bar + baz"
                   + "\n\n\n"
-                  + "// some-folder/file4.js:\n"
+                  + ";// some-folder/file4.js:\n"
                   + "// file4 content\ntest test test more test"
                   + "\n\n\n"
-                  + "// some-folder/file3.js:\n"
+                  + ";// some-folder/file3.js:\n"
                   + "// file3 content\ntest test more test"
                   + "\n\n\n",
         expected2 = expected1.replace("// file4 content\ntest test test more test", "changed");
@@ -143,8 +155,20 @@ var tests = {
   },
 
   testHashIsUpdatedWhenFileChanges: function(test) {
-    var expected1 = "d791cc00f6c48cb244fa36306f991ea6",
-        expected2 = "e6019acbf9c8917c5417d1c4f3d132fd";
+    var content1 = '// This file was generated on ' + fsTimeStamp + '\n\n'
+                  + 'JSLoader.expectToLoadModules([\'some-folder/file1.js\',\'some-folder/file4.js\',\'some-folder/file3.js\']);\n\n'
+                  + ";// some-folder/file1.js:\n"
+                  + "// file1 content\nfoo + bar + baz"
+                  + "\n\n\n"
+                  + ";// some-folder/file4.js:\n"
+                  + "// file4 content\ntest test test more test"
+                  + "\n\n\n"
+                  + ";// some-folder/file3.js:\n"
+                  + "// file3 content\ntest test more test"
+                  + "\n\n\n",
+        content2 = content1.replace("// file4 content\ntest test test more test", "changed"),
+        expected1 = md5(content1),
+        expected2 = md5(content2);
     async.series([
       function(next) {
         get('combined/some.js?hash', function(err, res, body) {
