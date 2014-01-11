@@ -13,6 +13,8 @@ function FileFuser(options) {
   this.baseDirectory = options.baseDirectory;
   this.files = options.files;
   this.combinedFile = options.combinedFile;
+  this.fileWatcher = null;
+  this.combinedFileBuildTime = null;
 }
 
 FileFuser.prototype.getCombinedFilePath = function() {
@@ -27,17 +29,18 @@ FileFuser.prototype.getCombinedFileStream = function(thenDo) {
   thenDo(null, stream);
 }
 
-function createHeader(files) {
+function createHeader(timestamp, files) {
   return util.format('// This file was generated on %s\n\n'
                    + 'JSLoader.expectToLoadModules([%s]);\n\n',
-                     new Date().toGMTString(),
+                     timestamp.toGMTString(),
                      files.map(function(fn) { return "'" + fn + "'" }));
 }
 
 FileFuser.prototype.writeFilesInto = function(baseDirectory, files, thenDo) {
-  var targetFilePath   = this.getCombinedFilePath(),
+  var time             = this.combinedFileBuildTime = new Date(),
+      targetFilePath   = this.getCombinedFilePath(),
       targetFileStream = fs.createWriteStream(targetFilePath),
-      headerTask       = function(next) { targetFileStream.write(createHeader(files)); next(); },
+      headerTask       = function(next) { targetFileStream.write(createHeader(time, files)); next(); },
       writeFileTasks   = [headerTask].concat(files.map(function(file) {
         var fullPath = path.join(baseDirectory, file);
         return function(next) {
@@ -58,8 +61,20 @@ FileFuser.prototype.writeFilesInto = function(baseDirectory, files, thenDo) {
   });
 }
 
-FileFuser.prototype.checkIfCombinedFilesAreUpToDate = function(thenDo) {
-  thenDo(null, false);
+FileFuser.prototype.checkIfCombinedFilesAreUpToDate = function(watcher, thenDo) {
+  var targetFilePath = this.getCombinedFilePath(),
+      lastBuildTime = this.combinedFileBuildTime;
+  async.waterfall([
+    function(next) {
+      fs.exists(targetFilePath, function(exists) {
+        next(null, exists); });
+    },
+    function(combinedFileExists, next) {
+      if (!combinedFileExists) thenDo(null, false);
+      else watcher.getChangesSince(lastBuildTime, next);
+    },
+    function(changes, next) { thenDo(null, changes.length === 0); }
+  ], thenDo);
 }
 
 FileFuser.prototype.computeHash = function(combinedFileStream, thenDo) {
@@ -72,18 +87,39 @@ FileFuser.prototype.computeHash = function(combinedFileStream, thenDo) {
 }
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+// file watcher
+FileFuser.prototype.ensureFileWatcher = function(thenDo) {
+  var self = this;
+  if (self.fileWatcher) { thenDo(null, self.fileWatcher); return; }
+  if (self._fileWatcherIsStarting) {
+    setTimeout(self.ensureFileWatcher.bind(self, thenDo), 200);
+    return;
+  }
+  self._fileWatcherIsStarting = true;
+  fWatcher.onFiles(self.baseDirectory, self.files, {}, function(err, watcher) {
+    delete self._fileWatcherIsStarting;
+    if (err) { thenDo(err, null); return; }
+    self.fileWatcher = watcher;
+    thenDo(null, watcher);
+  });
+}
+
+// -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // main interface
 
 FileFuser.prototype.withCombinedFileStreamDo = function(thenDo) {
   var self = this;
-  self.checkIfCombinedFilesAreUpToDate(function(err, areUpToDate) {
+  async.waterfall([
+    function(next) { self.ensureFileWatcher(next); },
+    function(watcher, next) { self.checkIfCombinedFilesAreUpToDate(watcher, next); },
+    function(areUpToDate, next) {
+      if (areUpToDate) next();
+      else self.writeFilesInto(self.baseDirectory, self.files, next);
+    }
+  ], function(err) {
     if (err) { thenDo(err, null); return; }
-    else if (areUpToDate) self.getCombinedFileStream(thenDo);
-    else self.writeFilesInto(self.baseDirectory, self.files, function(err, combinedFileName) {
-      if (err) { thenDo(err, null); return; }
-      self.getCombinedFileStream(thenDo);
-    });
-  })
+    self.getCombinedFileStream(thenDo);
+  });
 }
 
 FileFuser.prototype.withHashDo = function(doFunc) {
@@ -95,8 +131,14 @@ FileFuser.prototype.withHashDo = function(doFunc) {
 }
 
 FileFuser.prototype.close = function(doFunc) {
-  // nothing to close yet...
-  doFunc && doFunc(null);
+  var self = this;
+  if (!self.fileWatcher && !self._fileWatcherIsStarting) {
+    doFunc && doFunc(null); return; }
+  async.waterfall([
+    self.ensureFileWatcher.bind(self),
+    function(watcher, next) {
+      if (!watcher) next(); else watcher.close(next); }
+  ], doFunc);
 }
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -108,5 +150,6 @@ module.exports = function(options, thenDo) {
   //   files [STRING],
   //   combinedFile: STRING -- path to file that holds fused content
   var fileFuser = new FileFuser(options);
-  thenDo(null, fileFuser);
-};
+  fileFuser.ensureFileWatcher(function(err, _) {
+    thenDo(err, fileFuser); });
+}

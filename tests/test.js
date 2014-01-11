@@ -7,13 +7,15 @@ var path          = require("path"),
     port          = 9011,
     baseDirectory = __dirname,
     testDirectory = path.join(baseDirectory, "testDir"),
-                    fuser, fsTimeStamp;
+                    fuser, setupTimeStamp;
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // debugging
 function logProgress(msg) {
   return function(thenDo) { console.log(msg); thenDo && thenDo(); }
 }
+
+function await(ms) { return function(next) { setTimeout(next, ms); }; }
 
 function md5(string) {
     var md5 = crypto.createHash('md5');
@@ -45,7 +47,6 @@ var tests = {
             }
           }
         };
-        fsTimeStamp = (new Date()).toGMTString();
         fsHelper.createDirStructure(baseDirectory, files, next);
       },
       logProgress('test files created'),
@@ -58,7 +59,8 @@ var tests = {
                   'some-folder/file3.js']
           }, function(err, _fuser) { fuser = _fuser; next(err); });
       },
-      logProgress('handler setup')
+      logProgress('handler setup'),
+      function(next) { setupTimeStamp = (new Date()).toGMTString(); next(); }
     ], callback);
   },
 
@@ -70,7 +72,7 @@ var tests = {
   },
 
   testSimpleFileFuse: function(test) {
-    var expected = '// This file was generated on ' + fsTimeStamp + '\n\n'
+    var expected = '// This file was generated on ' + setupTimeStamp + '\n\n'
                  + 'JSLoader.expectToLoadModules([\'some-folder/file1.js\',\'some-folder/file4.js\',\'some-folder/file3.js\']);\n\n'
                  + ";// some-folder/file1.js:\n"
                  + "// file1 content\nfoo + bar + baz"
@@ -81,18 +83,15 @@ var tests = {
                  + ";// some-folder/file3.js:\n"
                  + "// file3 content\ntest test more test"
                  + "\n\n\n";
-    fuser.withCombinedFileStreamDo(function(err, stream) {
-      test.ifError(err);
-      withStreamData(stream, function(err, data) {
-        test.ifError(err);
-        test.equal(data, expected);
-        test.done();
-      });
-    });
+    async.waterfall([
+      fuser.withCombinedFileStreamDo.bind(fuser),
+      withStreamData,
+      function(data, next) { test.equal(data, expected); next(); }
+    ], test.done);
   },
 
   testFusedContentIsUpdatedWhenFileChanges: function(test) {
-    var expected1 = '// This file was generated on ' + fsTimeStamp + '\n\n'
+    var expected1 = '// This file was generated on ' + setupTimeStamp + '\n\n'
                   + 'JSLoader.expectToLoadModules([\'some-folder/file1.js\',\'some-folder/file4.js\',\'some-folder/file3.js\']);\n\n'
                   + ";// some-folder/file1.js:\n"
                   + "// file1 content\nfoo + bar + baz"
@@ -104,35 +103,24 @@ var tests = {
                   + "// file3 content\ntest test more test"
                   + "\n\n\n",
         expected2 = expected1.replace("// file4 content\ntest test test more test", "changed");
-    async.series([
-      function(next) {
-        fuser.withCombinedFileStreamDo(function(err, stream) {
-          test.ifError(err);
-          withStreamData(stream, function(err, data) {
-            test.ifError(err);
-            test.equal(data, expected1, 'original content not OK');
-            next();
-          });
-        });
-      },
-      function(next) {
-        fs.writeFile(path.join(testDirectory, 'some-folder', 'file4.js'), "changed", next);
-      },
-      function(next) {
-        fuser.withCombinedFileStreamDo(function(err, stream) {
-          test.ifError(err);
-          withStreamData(stream, function(err, data) {
-            test.ifError(err);
-            test.equal(data, expected2, "content not updated");
-            next();
-          });
-        });
-      }
+    async.waterfall([
+      fuser.withCombinedFileStreamDo.bind(fuser),
+      withStreamData,
+      function(data, next) { test.equal(data, expected1, 'original content not OK'); next(); },
+      fs.writeFile.bind(fs, path.join(testDirectory, 'some-folder', 'file4.js'), "changed"),
+      await(100),
+      fuser.withCombinedFileStreamDo.bind(fuser),
+      withStreamData,
+      function(data, next) { test.equal(data, expected2, "content not updated"); next(); },
+      await(100),
+      fuser.withCombinedFileStreamDo.bind(fuser),
+      withStreamData,
+      function(data, next) { test.equal(data, expected2, "content updated too often?"); next(); },
     ], test.done);
   },
 
   testHashIsUpdatedWhenFileChanges: function(test) {
-    var content1 = '// This file was generated on ' + fsTimeStamp + '\n\n'
+    var content1 = '// This file was generated on ' + setupTimeStamp + '\n\n'
                   + 'JSLoader.expectToLoadModules([\'some-folder/file1.js\',\'some-folder/file4.js\',\'some-folder/file3.js\']);\n\n'
                   + ";// some-folder/file1.js:\n"
                   + "// file1 content\nfoo + bar + baz"
@@ -146,22 +134,16 @@ var tests = {
         content2 = content1.replace("// file4 content\ntest test test more test", "changed"),
         expected1 = md5(content1),
         expected2 = md5(content2);
-    async.series([
-      function(next) {
-        fuser.withHashDo(function(err, hash) {
-          test.ifError(err);
-          test.equal(hash, expected1); next();
-        });
-      },
-      function(next) {
-        fs.writeFile(path.join(testDirectory, 'some-folder', 'file4.js'), "changed", next);
-      },
-      function(next) {
-        fuser.withHashDo(function(err, hash) {
-          test.ifError(err);
-          test.equal(hash, expected2); next();
-        });
-      },
+    async.waterfall([
+      fuser.withHashDo.bind(fuser),
+      function(hash, next) { test.equal(hash, expected1); next(); },
+      fs.writeFile.bind(fs, path.join(testDirectory, 'some-folder', 'file4.js'), "changed"),
+      await(100),
+      fuser.withHashDo.bind(fuser),
+      function(hash, next) { test.equal(hash, expected2); next(); },
+      await(100),
+      fuser.withHashDo.bind(fuser),
+      function(hash, next) { test.equal(hash, expected2, 'hash/content not cached?'); next(); },
     ], test.done);
   }
 

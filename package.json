@@ -1,6 +1,6 @@
 {
   "name": "file-fuser",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "subserver to combine files for caching",
   "main": "index.js",
   "scripts": {
@@ -16,7 +16,7 @@
   "license": "MIT",
   "dependencies": {
     "async": "~0.2",
-    "watch-interface": ""
+    "watch-interface": ">=0.0.3"
   },
   "devDependencies": {
     "nodeunit": "~0.8",
