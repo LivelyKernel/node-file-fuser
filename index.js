@@ -1,12 +1,19 @@
-var path   = require("path"),
-    util   = require("util"),
-    fs     = require("fs"),
-    async  = require("async"),
-    url    = require("url"),
-    crypto = require("crypto");
+var path     = require("path"),
+    util     = require("util"),
+    fs       = require("fs"),
+    async    = require("async"),
+    url      = require("url"),
+    crypto   = require("crypto"),
+    fWatcher = require("watch-interface");
 
-// not yet used...
-var fWatcher = require("watch-interface");
+// helper
+var debug = false;
+
+function log(/*args*/) {
+  if (debug) console.log.apply(console, arguments);
+}
+
+// FileFuser
 
 function FileFuser(options) {
   if (!options) throw new Error('FileFuser requires config object');
@@ -53,6 +60,8 @@ FileFuser.prototype.writeFilesInto = function(baseDirectory, files, thenDo) {
           });
         }
       }));
+
+  log('Creating combined file %s from [%s]', targetFilePath, files);
 
   async.series(writeFileTasks, function(err) {
     if (err) { console.log('error writing %s: %s', targetFilePath, err); }
