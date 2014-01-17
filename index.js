@@ -53,6 +53,7 @@ FileFuser.prototype.writeFilesInto = function(baseDirectory, files, thenDo) {
         return function(next) {
           targetFileStream.write(';// ' + file + ':\n');
           var reader = fs.createReadStream(fullPath)
+          reader.on('error', function(err) { next(err); });
           reader.pipe(targetFileStream, {end: false/*don't close target stream*/});
           reader.on('end', function() {
             targetFileStream.write('\n\n\n');
@@ -87,6 +88,7 @@ FileFuser.prototype.checkIfCombinedFilesAreUpToDate = function(watcher, thenDo) 
 }
 
 FileFuser.prototype.computeHash = function(combinedFileStream, thenDo) {
+  combinedFileStream.on('error', function(err) { thenDo(err); });
   var md5sum = crypto.createHash('md5'), hash;
   md5sum.setEncoding('hex');
   md5sum.on('data', function(d) {hash = String(d); });

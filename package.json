@@ -1,6 +1,6 @@
 {
   "name": "file-fuser",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "subserver to combine files for caching",
   "main": "index.js",
   "scripts": {
@@ -12,7 +12,9 @@
     "subserver",
     "caching"
   ],
-  "author": "Robert Krahn",
+  "author": {
+    "name": "Robert Krahn"
+  },
   "license": "MIT",
   "dependencies": {
     "async": "~0.2",
@@ -22,5 +24,9 @@
     "nodeunit": "~0.8",
     "request": "~2.25",
     "lively-fs-helper": "https://github.com/rksm/lively-fs-helper/tarball/master"
-  }
+  },
+  "readme": "# file-fuser\n\nSpecify a given set of files that will be concatenated into one file. Reacts to\nfile changes. Will also generate a md5 hash that can be used as an etag/cache\nkey, useful for HTTP tricks.\n\nResurrected from an old python script used for creating the combined.js file on\n[](http://lively-kernel.org/repository/webwerkstatt/).\n\n## Usage\n\n## License\n\n[MIT](LICENSE)",
+  "readmeFilename": "README.md",
+  "_id": "file-fuser@0.0.4",
+  "_from": "file-fuser@>=0.0.4"
 }
