@@ -4,7 +4,9 @@ var path     = require("path"),
     async    = require("async"),
     url      = require("url"),
     crypto   = require("crypto"),
-    fWatcher = require("watch-interface");
+    fWatcher = require("watch-interface"),
+    eventStream = require("event-stream"),
+    sourcemap = require("source-map");
 
 // helper
 var debug = false;
@@ -22,10 +24,24 @@ function FileFuser(options) {
   this.combinedFile = options.combinedFile;
   this.fileWatcher = null;
   this.combinedFileBuildTime = null;
+  this.sourceMapFile = options.combinedFile + '.jsm';
+  this.sourceRoot = options.sourceRoot;
+}
+
+FileFuser.prototype.getSourceMapFilePath = function() {
+  return path.join(this.baseDirectory, this.sourceMapFile);
 }
 
 FileFuser.prototype.getCombinedFilePath = function() {
   return path.join(this.baseDirectory, this.combinedFile);
+}
+
+FileFuser.prototype.getSourceMapFileStream = function(thenDo) {
+  var stream;
+  try {
+    stream = fs.createReadStream(this.getSourceMapFilePath());
+  } catch (e) { thenDo(e, stream); }
+  thenDo(null, stream);
 }
 
 FileFuser.prototype.getCombinedFileStream = function(thenDo) {
@@ -47,18 +63,40 @@ FileFuser.prototype.writeFilesInto = function(baseDirectory, files, thenDo) {
   var time             = this.combinedFileBuildTime = new Date(),
       targetFilePath   = this.getCombinedFilePath(),
       targetFileStream = fs.createWriteStream(targetFilePath),
+      jsmFilePath      = this.getSourceMapFilePath(),
+      jsmFileStream    = fs.createWriteStream(jsmFilePath),
+      jsmGenerator     = new sourcemap.SourceMapGenerator({
+        file: this.sourceMapFile,
+        sourceRoot: this.sourceRoot
+      }),
       headerTask       = function(next) { targetFileStream.write(createHeader(time, files)); next(); },
+      lineNo           = 6,
+      linesInFile,
       writeFileTasks   = [headerTask].concat(files.map(function(file) {
         var fullPath = path.join(baseDirectory, file);
         return function(next) {
           targetFileStream.write(';// ' + file + ':\n');
+          linesInFile = 1;
           var reader = fs.createReadStream(fullPath)
           reader.on('error', function(err) { next(err); });
-          reader.pipe(targetFileStream, {end: false/*don't close target stream*/});
-          reader.on('end', function() {
-            targetFileStream.write('\n\n\n');
-            next();
-          });
+          eventStream.pipeline(
+            reader,
+            eventStream.through(function write(data) {
+              linesInFile += data.toString('utf8').split(/\r\n|[\n\r\u0085\u2028\u2029]/g).length-1;
+              targetFileStream.write(data)
+            }, function end() {
+              for (var i = 0; i <= linesInFile; i++) {
+                jsmGenerator.addMapping({
+                  generated: { line: lineNo + i, column: 1 },
+                  original: { line: i + 1, column: 1 },
+                  source: file
+                });
+              }
+              targetFileStream.write('\n\n');
+              lineNo += linesInFile + 2;
+              next();
+            })
+          );
         }
       }));
 
@@ -67,6 +105,7 @@ FileFuser.prototype.writeFilesInto = function(baseDirectory, files, thenDo) {
   async.series(writeFileTasks, function(err) {
     if (err) { console.log('error writing %s: %s', targetFilePath, err); }
     targetFileStream.end();
+    jsmFileStream.end(jsmGenerator.toString());
     thenDo(err);
   });
 }
@@ -131,6 +170,10 @@ FileFuser.prototype.withCombinedFileStreamDo = function(thenDo) {
     if (err) { thenDo(err, null); return; }
     self.getCombinedFileStream(thenDo);
   });
+}
+
+FileFuser.prototype.withSourceMapStreamDo = function(thenDo) {
+  this.getSourceMapFileStream(thenDo);
 }
 
 FileFuser.prototype.withHashDo = function(doFunc) {
