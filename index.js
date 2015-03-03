@@ -9,7 +9,7 @@ var path     = require("path"),
     sourcemap = require("source-map");
 
 // helper
-var debug = false;
+var debug = true;
 
 function log(/*args*/) {
   if (debug) console.log.apply(console, arguments);
@@ -146,7 +146,16 @@ FileFuser.prototype.ensureFileWatcher = function(thenDo) {
     return;
   }
   self._fileWatcherIsStarting = true;
+
+  self._startSentinel = setTimeout(function() {
+    if (!self._fileWatcherIsStarting) return;
+    delete self._fileWatcherIsStarting;
+    delete self._startSentinel;
+    thenDo(new Error("file fuser timed out while starting on " + self.baseDirectory));
+  }, 2*1000);
+
   fWatcher.onFiles(self.baseDirectory, self.files, {}, function(err, watcher) {
+    if (!self._fileWatcherIsStarting) return;
     delete self._fileWatcherIsStarting;
     if (err) { thenDo(err, null); return; }
     self.fileWatcher = watcher;
@@ -203,7 +212,10 @@ module.exports = function(options, thenDo) {
   //   baseDirectory: STRING,
   //   files [STRING],
   //   combinedFile: STRING -- path to file that holds fused content
+  log("Acquiring fileFuser instance...");
   var fileFuser = new FileFuser(options);
   fileFuser.ensureFileWatcher(function(err, _) {
+    if (err) console.error("Error starting fileFuser isntance: " + err);
+    else log("fileFuser instance created");
     thenDo(err, fileFuser); });
-}
+};

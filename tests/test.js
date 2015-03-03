@@ -12,7 +12,7 @@ var path          = require("path"),
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 // debugging
 function logProgress(msg) {
-  return function(thenDo) { console.log(msg); thenDo && thenDo(); }
+  return function(thenDo) { console.log(msg); thenDo && thenDo(); };
 }
 
 function await(ms) { return function(next) { setTimeout(next, ms); }; }
