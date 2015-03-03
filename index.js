@@ -9,7 +9,7 @@ var path     = require("path"),
     sourcemap = require("source-map");
 
 // helper
-var debug = true;
+var debug = false;
 
 function log(/*args*/) {
   if (debug) console.log.apply(console, arguments);
