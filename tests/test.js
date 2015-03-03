@@ -41,7 +41,7 @@ var tests = {
           "testDir": {
             "some-folder": {
               "file1.js": "// file1 content\nfoo + bar + baz",
-              "file2.js": "// file2 content\ntest test test\n\n\n\n",
+              "file2.js": "// file2 content\ntest test test\n\n\n",
               "file3.js": "// file3 content\ntest test more test",
               "file4.js": "// file4 content\ntest test test more test"
             }
@@ -76,13 +76,13 @@ var tests = {
                  + 'JSLoader.expectToLoadModules([\'some-folder/file1.js\',\'some-folder/file4.js\',\'some-folder/file3.js\']);\n\n'
                  + ";// some-folder/file1.js:\n"
                  + "// file1 content\nfoo + bar + baz"
-                 + "\n\n\n"
+                 + "\n\n"
                  + ";// some-folder/file4.js:\n"
                  + "// file4 content\ntest test test more test"
-                 + "\n\n\n"
+                 + "\n\n"
                  + ";// some-folder/file3.js:\n"
                  + "// file3 content\ntest test more test"
-                 + "\n\n\n";
+                 + "\n\n";
     async.waterfall([
       fuser.withCombinedFileStreamDo.bind(fuser),
       withStreamData,
@@ -95,13 +95,13 @@ var tests = {
                   + 'JSLoader.expectToLoadModules([\'some-folder/file1.js\',\'some-folder/file4.js\',\'some-folder/file3.js\']);\n\n'
                   + ";// some-folder/file1.js:\n"
                   + "// file1 content\nfoo + bar + baz"
-                  + "\n\n\n"
+                  + "\n\n"
                   + ";// some-folder/file4.js:\n"
                   + "// file4 content\ntest test test more test"
-                  + "\n\n\n"
+                  + "\n\n"
                   + ";// some-folder/file3.js:\n"
                   + "// file3 content\ntest test more test"
-                  + "\n\n\n",
+                  + "\n\n",
         expected2 = expected1.replace("// file4 content\ntest test test more test", "changed");
     async.waterfall([
       fuser.withCombinedFileStreamDo.bind(fuser),
@@ -124,13 +124,13 @@ var tests = {
                   + 'JSLoader.expectToLoadModules([\'some-folder/file1.js\',\'some-folder/file4.js\',\'some-folder/file3.js\']);\n\n'
                   + ";// some-folder/file1.js:\n"
                   + "// file1 content\nfoo + bar + baz"
-                  + "\n\n\n"
+                  + "\n\n"
                   + ";// some-folder/file4.js:\n"
                   + "// file4 content\ntest test test more test"
-                  + "\n\n\n"
+                  + "\n\n"
                   + ";// some-folder/file3.js:\n"
                   + "// file3 content\ntest test more test"
-                  + "\n\n\n",
+                  + "\n\n",
         content2 = content1.replace("// file4 content\ntest test test more test", "changed"),
         expected1 = md5(content1),
         expected2 = md5(content2);

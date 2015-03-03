@@ -77,13 +77,13 @@ FileFuser.prototype.writeFilesInto = function(baseDirectory, files, thenDo) {
         return function(next) {
           targetFileStream.write(';// ' + file + ':\n');
           linesInFile = 1;
-          var reader = fs.createReadStream(fullPath)
+          var reader = fs.createReadStream(fullPath);
           reader.on('error', function(err) { next(err); });
           eventStream.pipeline(
             reader,
             eventStream.through(function write(data) {
               linesInFile += data.toString('utf8').split(/\r\n|[\n\r\u0085\u2028\u2029]/g).length-1;
-              targetFileStream.write(data)
+              targetFileStream.write(data);
             }, function end() {
               for (var i = 0; i <= linesInFile; i++) {
                 jsmGenerator.addMapping({
