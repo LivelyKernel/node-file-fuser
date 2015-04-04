@@ -1,6 +1,6 @@
 {
   "name": "file-fuser",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "description": "subserver to combine files for caching",
   "main": "index.js",
   "scripts": {
