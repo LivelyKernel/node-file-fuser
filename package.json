@@ -18,7 +18,7 @@
   "license": "MIT",
   "dependencies": {
     "async": "~0.9",
-    "watch-interface": "~0.2.2",
+    "watch-interface": "~0.3",
     "event-stream": ">=3.1.0",
     "source-map": ">=0.1.31"
   },
